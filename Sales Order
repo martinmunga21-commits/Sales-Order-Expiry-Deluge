@@ -1,0 +1,84 @@
+// Custom Function to expire (void) open sales orders not supplied (still open) within 24 hours
+// Schedule this function to run daily or as needed
+
+orgId = zoho.books.getDefaultOrgId("zohobooks");  // Replace "books_connection" with your actual connection name
+
+// Calculate time 24 hours ago
+twentyFourHrsAgo = zoho.currenttime.addHour(-24);
+
+// Filter parameters: open sales orders, sorted by created_time ascending to optimize fetching
+filterParams = Map();
+filterParams.put("status", "open");
+filterParams.put("sort_column", "created_time");
+filterParams.put("sort_order", "A");  // Ascending for oldest first
+filterParams.put("per_page", "200");  // Max per page for efficiency
+
+// Pagination loop with early stopping
+page = 1;
+continueFetching = true;
+while(continueFetching)
+{
+    filterParams.put("page", page.toString());
+	 
+    // Fetch the sales orders
+    salesOrdersResponse = zoho.books.getRecords("salesorders", orgId, filterParams, "zohobooks");
+	
+    salesOrders = salesOrdersResponse.get("salesorders");
+    if(salesOrders == null || salesOrders.size() == 0)
+    {
+        break;
+    }
+    
+    allOldInPage = true;
+    for each  salesOrder in salesOrders
+    {
+        createdTimeStr = salesOrder.get("created_time");
+        // Parse created_time (format: yyyy-MM-dd'T'HH:mm:ssZ, e.g., 2023-05-15T05:45:22+0530)
+        createdTime = createdTimeStr.toTime("yyyy-MM-dd'T'HH:mm:ssZ");
+        
+        if(createdTime >= twentyFourHrsAgo)
+        {
+            allOldInPage = false;
+            break;  // No need to process further in this page or subsequent pages
+        }
+        
+        salesOrderId = salesOrder.get("salesorder_id").toLong();
+        
+        // Endpoint to void the sales order
+        voidUrl = "https://www.zohoapis.com/books/v3/salesorders/" + salesOrderId + "/status/void";
+        
+        // Parameters for the void request (organization_id may not be necessary but included for safety)
+        voidParams = Map();
+        voidParams.put("organization_id", orgId);
+        
+        // Invoke the API to void the sales order
+        voidResponse = invokeurl
+        [
+            url: voidUrl
+            type: PUT
+            parameters: voidParams
+            connection: "zohobooks"
+        ];
+        
+        info "Void response for SO " + salesOrderId + ": " + voidResponse;
+    }
+    
+    if(!allOldInPage)
+    {
+        continueFetching = false;
+    }
+    else
+    {
+        hasMore = salesOrdersResponse.get("page_context").get("has_more_page").toBoolean();
+        if(!hasMore)
+        {
+            continueFetching = false;
+        }
+        page = page + 1;
+    }
+}
+
+if(salesOrdersResponse == null || salesOrders == null || salesOrders.size() == 0)
+{
+    info "No open sales orders older than 24 hours found.";
+}
