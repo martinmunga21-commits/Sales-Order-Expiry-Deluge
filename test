@@ -1,0 +1,41 @@
+
+// Get your Zoho Books org ID
+orgId = 871814856;
+// Time 24 hours ago
+twentyFourHrsAgo = zoho.currenttime.addHour(-24);
+// Base filter
+filterParams = Map();
+filterParams.put("status","open");
+filterParams.put("sort_column","created_time");
+filterParams.put("sort_order","A");
+filterParams.put("per_page","200");
+// Suppose we want to check the first 5 pages (adjust as needed)
+for each  page in {1,2,3,4,5}
+{
+	filterParams.put("page",page.toString());
+	response = zoho.books.getRecords("salesorders",orgId,filterParams);
+	if(response.get("code") == 0)
+	{
+		orders = response.get("salesorders");
+		// Loop through sales orders in this page
+		for each  order in orders
+		{
+			createdTime = order.get("created_time");
+			createdDateTime = createdTime.toDateTime("yyyy-MM-dd'T'HH:mm:ssXXX");
+			// adjust format if API returns differently
+			if(createdDateTime < twentyFourHrsAgo)
+			{
+				orderId = order.get("salesorder_id");
+				// Void this sales order
+				updateMap = Map();
+				updateMap.put("status","void");
+				voidResponse = zoho.books.updateRecord("salesorders",orgId,orderId,updateMap);
+				info "Voided Sales Order ID: " + orderId + " | Created: " + createdTime;
+			}
+		}
+	}
+	else
+	{
+		info "Error fetching sales orders: " + response.toString();
+	}
+}
